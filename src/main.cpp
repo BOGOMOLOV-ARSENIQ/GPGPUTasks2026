@@ -126,6 +126,17 @@ int main()
 			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_SIZE, deviceMemParamSize, &deviceMemSizeByte, nullptr));
 			std::cout << "        Device mem size: " << (deviceMemSizeByte / (1<<20)) << " MB" << std::endl;
 
+			size_t deviceComputeUnitsParamSize = 0;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_MAX_COMPUTE_UNITS, 0, nullptr, &deviceComputeUnitsParamSize));
+			cl_uint deviceComputeUnits;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_MAX_COMPUTE_UNITS, deviceComputeUnitsParamSize, &deviceComputeUnits, nullptr));
+			std::cout << "        Device compute units: " << deviceComputeUnits << std::endl;
+
+			size_t deviceCacheLineParamSize = 0;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, 0, nullptr, &deviceCacheLineParamSize));
+			cl_uint deviceCacheLineSizeByte;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, deviceCacheLineParamSize, &deviceCacheLineSizeByte, nullptr));
+			std::cout << "        Device cacheline size: " << deviceCacheLineSizeByte << " bytes" << std::endl;
 		}
 	}
 
