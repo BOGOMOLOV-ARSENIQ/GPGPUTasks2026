@@ -137,6 +137,20 @@ int main()
 			cl_uint deviceCacheLineSizeByte;
 			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, deviceCacheLineParamSize, &deviceCacheLineSizeByte, nullptr));
 			std::cout << "        Device cacheline size: " << deviceCacheLineSizeByte << " bytes" << std::endl;
+
+			size_t deviceCacheTypeParamSize = 0;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_CACHE_TYPE, 0, nullptr, &deviceCacheTypeParamSize));
+			cl_device_mem_cache_type deviceCacheType;
+			OCL_SAFE_CALL(clGetDeviceInfo(devices[deviceIndex], CL_DEVICE_GLOBAL_MEM_CACHE_TYPE, deviceCacheTypeParamSize, &deviceCacheType, nullptr));
+			std::cout << "        Device cache type: ";
+			if (deviceCacheType == CL_READ_ONLY_CACHE) {
+				std::cout << "ro";
+			} else if (deviceCacheType == CL_READ_WRITE_CACHE) {
+				std::cout << "rw";
+			} else if (deviceCacheType == CL_NONE) {
+				std::cout << "none";
+			}
+			std::cout << std::endl;
 		}
 	}
 
