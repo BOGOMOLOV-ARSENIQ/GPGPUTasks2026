@@ -17,7 +17,7 @@ __global__ void matrix_transpose_coalesced_via_local_memory(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
-    __shared__ float tile[16][16 + 1];
+    __shared__ float tile[32][32 + 1];
     if (idx < w && idy < h) {
         tile[threadIdx.y][threadIdx.x] = matrix[idy * w + idx];
     }
