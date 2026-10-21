@@ -22,70 +22,70 @@ __global__ void matrix_multiply_wmma(
                        unsigned int k)
 {
     // TODO 020 Это добровольное задание за супер-пупер-баллы престижа сверх нормы
-    __shared__ __align__(32) half shared_a[16][128];
-    __shared__ __align__(32) half shared_b[16][128];
+    // группа грузит A 64x32 и B 32x64 и считает кусок C 64x64
+    __shared__ __align__(32) half shared_a[64][32];
+    __shared__ __align__(32) half shared_b[32][64];
 
     wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[2];
     wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
-    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc[8];
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc[2];
 #pragma unroll
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 2; ++i) {
         wmma::fill_fragment(acc[i], 0.0f);
     }
 
-    int w_blocks = (w + 127) / 128;
+    int w_blocks = (w + 63) / 64;
 
+    // 8 варпов сеткой 2x4, каждый считает кусок C 32x16 = 2 плитки A x 1 плитка B
     int warp_id = threadIdx.x / 32;
-    int warp_row = warp_id / 2;
-    int warp_col = warp_id % 2;
+    int warp_row = warp_id / 4;
+    int warp_col = warp_id % 4;
 
-    for (int i = 0; i < ((k + 15) / 16); ++i) {
-        int a_row = (blockIdx.x / w_blocks) * 128;
-        int a_col = i * 16;
+    for (int i = 0; i < ((k + 31) / 32); ++i) {
+        int a_row = (blockIdx.x / w_blocks) * 64;
+        int a_col = i * 32;
 
 #pragma unroll
         for (int j = 0; j < 8; ++j) {
             int e = j * 256 + threadIdx.x;
-            shared_a[e / 128][e % 128] = __float2half(a[(a_row + e / 16) * k + a_col + e % 16]);
+            shared_a[e / 32][e % 32] = __float2half(a[(a_row + e / 32) * k + a_col + e % 32]);
         }
 
-        int b_row = i * 16;
-        int b_col = (blockIdx.x % w_blocks) * 128;
+        int b_row = i * 32;
+        int b_col = (blockIdx.x % w_blocks) * 64;
 
 #pragma unroll
         for (int j = 0; j < 8; ++j) {
             int e = j * 256 + threadIdx.x;
-            shared_b[e / 128][e % 128] = __float2half(b[(b_row + e / 128) * w + b_col + e % 128]);
+            shared_b[e / 64][e % 64] = __float2half(b[(b_row + e / 64) * w + b_col + e % 64]);
         }
 
         __syncthreads();
 
+        // срез по k шириной 32 = два шага mma по 16
 #pragma unroll
-        for (int ti = 0; ti < 2; ++ti) {
-            wmma::load_matrix_sync(a_frag[ti], &shared_a[0][0] + (warp_row * 32 + ti * 16) * 16, 16);
-        }
-
-#pragma unroll
-        for (int tj = 0; tj < 4; ++tj) {
-            wmma::load_matrix_sync(b_frag, &shared_b[0][0] + warp_col * 64 + tj * 16, 128);
+        for (int kk = 0; kk < 32; kk += 16) {
 #pragma unroll
             for (int ti = 0; ti < 2; ++ti) {
-                wmma::mma_sync(acc[ti * 4 + tj], a_frag[ti], b_frag, acc[ti * 4 + tj]);
+                wmma::load_matrix_sync(a_frag[ti], &shared_a[warp_row * 32 + ti * 16][kk], 32);
+            }
+
+            wmma::load_matrix_sync(b_frag, &shared_b[kk][warp_col * 16], 64);
+#pragma unroll
+            for (int ti = 0; ti < 2; ++ti) {
+                wmma::mma_sync(acc[ti], a_frag[ti], b_frag, acc[ti]);
             }
         }
 
         __syncthreads();
     }
 
-    int c_row = (blockIdx.x / w_blocks) * 128 + warp_row * 32;
-    int c_col = (blockIdx.x % w_blocks) * 128 + warp_col * 64;
+    int c_row = (blockIdx.x / w_blocks) * 64 + warp_row * 32;
+    int c_col = (blockIdx.x % w_blocks) * 64 + warp_col * 16;
 
 #pragma unroll
     for (int ti = 0; ti < 2; ++ti) {
-#pragma unroll
-        for (int tj = 0; tj < 4; ++tj) {
-            wmma::store_matrix_sync(c + (c_row + ti * 16) * w + c_col + tj * 16, acc[ti * 4 + tj], w, wmma::mem_row_major);
-        }
+        wmma::store_matrix_sync(c + (c_row + ti * 16) * w + c_col, acc[ti], w, wmma::mem_row_major);
     }
 }
 
